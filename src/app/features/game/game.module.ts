@@ -11,6 +11,7 @@ import { FactoryGameComponent } from './mini-games/factory-game.component';
 import { ClothingStoreGameComponent } from './mini-games/clothing-store-game.component';
 import { FreelanceDevGameComponent } from './mini-games/freelance-dev-game.component';
 import { EmployeeManagerComponent } from './components/employee-manager/employee-manager.component';
+import { TitleScreenComponent } from './title-screen.component';
 
 @NgModule({
   declarations: [
@@ -20,10 +21,11 @@ import { EmployeeManagerComponent } from './components/employee-manager/employee
     FactoryGameComponent,
     ClothingStoreGameComponent,
     FreelanceDevGameComponent,
-    EmployeeManagerComponent
+    EmployeeManagerComponent,
+    TitleScreenComponent 
   ],
   imports: [
-    CommonModule, // Crucial pour les pipes | number et | async
+    CommonModule, 
     DragDropModule,
     FormsModule
   ],
@@ -32,24 +34,3 @@ import { EmployeeManagerComponent } from './components/employee-manager/employee
   ]
 })
 export class GameModule { }
-
-export interface FoodtruckUpgrades {
-  grillLevel: number;
-  marketingLevel: number;
-  serviceLevel: number;
-  unlockedIngredients: string[];
-  maxServiceReached: number;
-  hasKeyboard: boolean; // NOUVEAU : Upgrade Clavier
-}
-
-// NOUVEAU : Stats pour le bilan
-export interface DailyStats {
-  revenue: number;
-  expenses: number;
-  customersServed: number;
-}
-
-export interface GameState {
-  // ... (tout le reste pareil)
-  dailyStats: DailyStats; // NOUVEAU
-}

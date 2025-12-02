@@ -3,11 +3,17 @@ import { BrowserModule } from '@angular/platform-browser';
 import { registerLocaleData } from '@angular/common';
 import localeFr from '@angular/common/locales/fr';
 
+// Imports Firebase
+import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
+import { provideAuth, getAuth } from '@angular/fire/auth';
+import { provideFirestore, getFirestore } from '@angular/fire/firestore';
+import { environment } from '../environments/environment';
+
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
 import { GameModule } from './features/game/game.module';
 
-// On enregistre la langue française
+// Enregistrement de la langue française
 registerLocaleData(localeFr);
 
 @NgModule({
@@ -17,11 +23,14 @@ registerLocaleData(localeFr);
   imports: [
     BrowserModule,
     AppRoutingModule,
-    GameModule
+    GameModule // Importe le jeu (et donc app-game-shell)
   ],
-  // On définit le français comme langue par défaut pour les pipes (number, date, currency...)
   providers: [
-    { provide: LOCALE_ID, useValue: 'fr-FR' }
+    { provide: LOCALE_ID, useValue: 'fr-FR' },
+    // CORRECTION : Les services Firebase doivent être ici, dans 'providers'
+    provideFirebaseApp(() => initializeApp(environment.firebase)),
+    provideAuth(() => getAuth()),
+    provideFirestore(() => getFirestore())
   ],
   bootstrap: [AppComponent]
 })

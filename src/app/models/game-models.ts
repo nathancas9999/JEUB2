@@ -31,7 +31,16 @@ export interface Company {
 }
 
 export interface IngredientStats { level: number; xp: number; xpMax: number; }
-export interface UserProfile { username: string; title: string; }
+
+// NOUVEAU : Structure pour le profil étendu
+export interface UserProfile { 
+    username: string; 
+    title: string;
+    avatarId?: string; // Emoji avatar
+    holdingId?: string; // ID de la guilde
+    creationDate?: number;
+}
+
 export interface DailyStats { day: number; revenue: number; expenses: number; customersServed: number; }
 
 export interface FoodtruckUpgrades {
@@ -44,9 +53,26 @@ export enum SetupItem { CHAIR = 'CHAIR', SCREEN = 'SCREEN', COFFEE = 'COFFEE', P
 export interface FreelanceUpgrades {
   chairLevel: number; screenLevel: number; coffeeLevel: number; pcLevel: number;
   bossBeaten: number; contractsCompleted: number;
-  // NOUVEAU : Sauvegarde des thèmes
   ownedThemes: string[];
   activeThemeId: string;
+}
+
+// NOUVEAU : Stats pour les camemberts et graphiques
+export interface PlayerStats {
+    foodtruckIncome: number;
+    freelanceIncome: number;
+    factoryIncome: number;
+    totalPlayTimeMinutes: number;
+}
+
+// NOUVEAU : Structure d'une Guilde (Holding)
+export interface Holding {
+    id: string;
+    name: string;
+    leaderName: string;
+    totalValuation: number; // Somme de l'argent des membres
+    membersCount: number;
+    icon: string;
 }
 
 export interface GameState {
@@ -61,6 +87,7 @@ export interface GameState {
   dailyStats: DailyStats;
   quests: any[]; achievements: any[]; activeEvents: any[];
   lastSavedAt: number; lastOnlineAt: number;
+  stats: PlayerStats; // Stats détaillées
 }
 
 export enum BurgerIngredient {

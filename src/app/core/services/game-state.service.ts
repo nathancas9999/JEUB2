@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, interval, Subject } from 'rxjs';
-import { GameState, Company, JobType, EmployeeRole, EmployeeConfig, IngredientStats, BurgerIngredient, FoodtruckUpgrades, DailyStats, FreelanceUpgrades, SetupItem, Employee } from '../../models/game-models';
+import { GameState, Company, JobType, EmployeeRole, EmployeeConfig, IngredientStats, BurgerIngredient, FoodtruckUpgrades, DailyStats, FreelanceUpgrades, SetupItem, Employee, UserProfile } from '../../models/game-models';
+import { FirebaseService } from './firebase.service';
 
 const EMPLOYEE_CONFIGS: Record<EmployeeRole, EmployeeConfig> = {
   [EmployeeRole.DEV_JUNIOR]: { role: EmployeeRole.DEV_JUNIOR, name: 'Stagiaire', baseCost: 2000, costFactor: 1.5, baseDailySalary: 100, salaryFactor: 1.2, baseEfficiency: 1, efficiencyFactor: 1.2, description: 'Code lentement' },
@@ -16,13 +17,16 @@ const EMPLOYEE_CONFIGS: Record<EmployeeRole, EmployeeConfig> = {
 @Injectable({ providedIn: 'root' })
 export class GameStateService {
   
-  private readonly SAVE_KEY = 'JEUB2_SAVE_REPAIR_V2_THEMES'; 
+  private readonly SAVE_KEY = 'JEUB2_SAVE_V3_ONLINE'; 
   private readonly TICK_RATE_MS = 1000; 
   private readonly HOURS_PER_TICK = 1 / 60; 
   public dayEnded$ = new Subject<DailyStats>();
+  
+  // NOUVEAU : Indicateur de chargement
+  public isLoading$ = new BehaviorSubject<boolean>(true);
 
   private defaultState: GameState = {
-    user: { username: 'Entrepreneur', title: 'Débutant' },
+    user: { username: 'Entrepreneur', title: 'Débutant', creationDate: Date.now(), avatarId: '👨‍💼' },
     money: 2000, gems: 0, totalMoneyEarned: 0, hasCompletedIntro: false,
     tutoFlags: { foodtruckIntroSeen: false },
     day: 1, timeOfDay: 6.0, 
@@ -35,121 +39,209 @@ export class GameStateService {
     employees: [],
     foodtruckMastery: this.initFoodtruckMastery(),
     foodtruckUpgrades: { grillLevel: 1, marketingLevel: 1, serviceLevel: 1, unlockedIngredients: [BurgerIngredient.BUN, BurgerIngredient.STEAK], maxServiceReached: 1, hasKeyboard: false },
-    // NOUVEAU : Initialisation des thèmes
     freelanceUpgrades: { chairLevel: 0, screenLevel: 0, coffeeLevel: 0, pcLevel: 0, bossBeaten: 0, contractsCompleted: 0, ownedThemes: ['DEFAULT'], activeThemeId: 'DEFAULT' },
     dailyStats: { revenue: 0, expenses: 0, customersServed: 0, day: 1 },
     quests: [], achievements: [], activeEvents: [],
-    lastSavedAt: Date.now(), lastOnlineAt: Date.now()
+    lastSavedAt: Date.now(), lastOnlineAt: Date.now(),
+    stats: { foodtruckIncome: 0, freelanceIncome: 0, factoryIncome: 0, totalPlayTimeMinutes: 0 }
   } as any;
 
   private state$ = new BehaviorSubject<GameState>(this.defaultState);
   public gameState$ = this.state$.asObservable();
 
-  constructor() {
-    this.loadState();
+  constructor(private firebaseService: FirebaseService) {
+    // On commence par charger le localstorage pour avoir quelque chose immédiatement
+    this.loadLocalState();
+    
     interval(this.TICK_RATE_MS).subscribe(() => this.gameLoop());
-    interval(10000).subscribe(() => this.saveState());
+    interval(60000).subscribe(() => this.saveToCloud());
+
+    this.firebaseService.user$.subscribe(user => {
+        if (user) {
+            // Si on est déjà dans le jeu (pas sur l'écran titre), on charge en arrière-plan
+            // Si on est sur l'écran titre, c'est lui qui gérera le flux
+            this.loadCloudDataForUser(user);
+        } else {
+            // Pas d'user -> Fin du chargement (mode invité par défaut)
+            this.isLoading$.next(false);
+        }
+    });
   }
 
-  // --- NOUVEAU : GESTION DES THÈMES ---
+  // --- NOUVEAU : GESTION CRÉATION COMPTE ---
+  
+  async checkIfUserHasSave(user: any): Promise<boolean> {
+      const save = await this.firebaseService.loadProgress();
+      return !!save;
+  }
+
+  async initializeNewUser(user: any, username: string) {
+      console.log("✨ Initialisation nouveau joueur :", username);
+      const cleanState = JSON.parse(JSON.stringify(this.defaultState));
+      cleanState.foodtruckMastery = this.initFoodtruckMastery();
+      cleanState.lastSavedAt = Date.now();
+      
+      cleanState.user = {
+          username: username,
+          title: 'Débutant',
+          creationDate: Date.now(),
+          avatarId: '👨‍💼'
+      };
+
+      this.state$.next(cleanState);
+      this.saveLocalState();
+      
+      await this.firebaseService.saveProgress(cleanState);
+      this.isLoading$.next(false);
+  }
+
+  // ----------------------------------------
+
+  async loadCloudDataForUser(user: any) {
+      this.isLoading$.next(true); // Début chargement
+      const cloudSave = await this.firebaseService.loadProgress();
+      
+      if (cloudSave) {
+          console.log("☁️ Sauvegarde chargée.");
+          this.state$.next(cloudSave);
+          this.saveLocalState();
+      } else {
+          console.log("🆕 Compte vide (Reload) -> Reset.");
+          // Si on est déjà connecté mais qu'il n'y a pas de save, c'est bizarre.
+          // On ne fait rien de destructif ici, on laisse l'état par défaut.
+      }
+      this.isLoading$.next(false); // Fin chargement
+  }
+
+  logoutAndClear() {
+      localStorage.removeItem(this.SAVE_KEY);
+      this.resetToDefaultState(false);
+      this.firebaseService.logout().then(() => window.location.reload());
+  }
+
+  hardResetGame() {
+      if(confirm("Tout effacer ?")) this.resetToDefaultState(true);
+  }
+
+  private resetToDefaultState(saveToCloud: boolean) {
+      const clean = JSON.parse(JSON.stringify(this.defaultState));
+      clean.foodtruckMastery = this.initFoodtruckMastery();
+      clean.lastSavedAt = Date.now();
+      this.state$.next(clean);
+      this.saveLocalState();
+      if(saveToCloud) this.saveToCloud();
+  }
+
+  updateUsername(newName: string, autoSave = true) {
+      const s = this.state$.getValue();
+      const currentUser = s.user || this.defaultState.user;
+      
+      const newUser: UserProfile = { 
+          username: newName,
+          title: currentUser?.title || 'Débutant',
+          avatarId: currentUser?.avatarId,
+          holdingId: currentUser?.holdingId,
+          creationDate: currentUser?.creationDate || Date.now()
+      };
+
+      this.updateState({ user: newUser });
+      if(autoSave) { this.saveLocalState(); this.saveToCloud(); }
+  }
+
+  // --- ACTIONS ---
+  buyPrestigeItem(item: { id: string; name: string; icon: string; cost: number }): boolean {
+      const s = this.state$.getValue();
+      const id = 'PRESTIGE_' + item.id;
+      if (s.achievements.some((a: any) => a.id === id)) return false;
+      if (this.spendMoney(item.cost)) {
+          const ach = [...s.achievements, { id, name: item.name, icon: item.icon }];
+          this.updateState({ achievements: ach });
+          this.saveLocalState(); this.saveToCloud();
+          return true;
+      }
+      return false;
+  }
+
   buyFreelanceTheme(themeId: string, cost: number) {
       if (this.spendMoney(cost)) {
           const s = this.state$.getValue();
-          const up = { ...s.freelanceUpgrades };
-          if (!up.ownedThemes.includes(themeId)) {
-              up.ownedThemes = [...up.ownedThemes, themeId];
-              // On l'équipe automatiquement à l'achat
-              up.activeThemeId = themeId;
-              this.updateState({ freelanceUpgrades: up });
-              this.saveState();
-          }
+          const up = { ...s.freelanceUpgrades, ownedThemes: [...s.freelanceUpgrades.ownedThemes, themeId], activeThemeId: themeId };
+          this.updateState({ freelanceUpgrades: up });
+          this.saveLocalState();
       }
   }
 
   setFreelanceTheme(themeId: string) {
       const s = this.state$.getValue();
-      const up = { ...s.freelanceUpgrades };
-      if (up.ownedThemes.includes(themeId)) {
-          up.activeThemeId = themeId;
-          this.updateState({ freelanceUpgrades: up });
-          this.saveState();
-      }
+      const up = { ...s.freelanceUpgrades, activeThemeId: themeId };
+      this.updateState({ freelanceUpgrades: up });
+      this.saveLocalState();
   }
 
-  // ... (Code existant inchangé pour les autres méthodes)
-  
   private createCompany(id: string, type: JobType, name: string, unlocked: boolean, cost: number): Company {
     return { id, type, name, unlocked, unlockCost: cost, level: 1, baseRevenuePerAction: 10, revenuePerSecond: 0, costPerSecond: 0, netProfitPerSecond: 0, employees: [] };
   }
   
-  unlockCompany(companyId: string, cost: number) {
+  unlockCompany(id: string, cost: number) {
     if (this.spendMoney(cost)) {
-      const state = this.state$.getValue();
-      const updatedCompanies = state.companies.map(c => c.id === companyId ? { ...c, unlocked: true } : c);
-      this.updateState({ companies: updatedCompanies });
-      this.saveState();
+      const s = this.state$.getValue();
+      this.updateState({ companies: s.companies.map(c => c.id === id ? { ...c, unlocked: true } : c) });
+      this.saveLocalState();
     }
   }
 
   buyFoodtruckUpgrade(type: 'grill' | 'marketing' | 'service', cost: number) {
     if (this.spendMoney(cost)) {
-      const state = this.state$.getValue();
-      const upgrades = { ...state.foodtruckUpgrades };
-      if (type === 'grill') upgrades.grillLevel++;
-      if (type === 'marketing') upgrades.marketingLevel++;
-      if (type === 'service') upgrades.serviceLevel++;
-      this.updateState({ foodtruckUpgrades: upgrades });
-      this.saveState();
+      const s = this.state$.getValue();
+      const up = { ...s.foodtruckUpgrades };
+      if(type === 'grill') up.grillLevel++; else if(type === 'marketing') up.marketingLevel++; else up.serviceLevel++;
+      this.updateState({ foodtruckUpgrades: up });
+      this.saveLocalState();
     }
   }
 
-  unlockIngredient(ingredient: string, cost: number) {
+  unlockIngredient(ing: string, cost: number) {
     if (this.spendMoney(cost)) {
-        const state = this.state$.getValue();
-        const upgrades = { ...state.foodtruckUpgrades };
-        if (!upgrades.unlockedIngredients.includes(ingredient)) {
-            upgrades.unlockedIngredients.push(ingredient);
-            this.updateState({ foodtruckUpgrades: upgrades });
-            this.saveState();
-        }
+        const s = this.state$.getValue();
+        const up = { ...s.foodtruckUpgrades, unlockedIngredients: [...s.foodtruckUpgrades.unlockedIngredients, ing] };
+        this.updateState({ foodtruckUpgrades: up });
+        this.saveLocalState();
     }
   }
   
   unlockKeyboard(cost: number) {
      if (this.spendMoney(cost)) {
-        const state = this.state$.getValue();
-        const upgrades = { ...state.foodtruckUpgrades, hasKeyboard: true };
-        this.updateState({ foodtruckUpgrades: upgrades });
-        this.saveState();
+        const s = this.state$.getValue();
+        const up = { ...s.foodtruckUpgrades, hasKeyboard: true };
+        this.updateState({ foodtruckUpgrades: up });
+        this.saveLocalState();
      }
   }
 
   incrementContractsCompleted() {
-      const state = this.state$.getValue();
-      const up = { ...state.freelanceUpgrades };
-      up.contractsCompleted = (up.contractsCompleted || 0) + 1;
+      const s = this.state$.getValue();
+      const up = { ...s.freelanceUpgrades, contractsCompleted: (s.freelanceUpgrades.contractsCompleted || 0) + 1 };
       this.updateState({ freelanceUpgrades: up });
-      this.saveState();
+      this.saveLocalState();
   }
 
   incrementBossBeaten() {
-      const state = this.state$.getValue();
-      const up = { ...state.freelanceUpgrades };
-      up.bossBeaten++;
+      const s = this.state$.getValue();
+      const up = { ...s.freelanceUpgrades, bossBeaten: s.freelanceUpgrades.bossBeaten + 1 };
       this.updateState({ freelanceUpgrades: up });
-      this.saveState();
+      this.saveLocalState();
   }
 
   buySetupUpgrade(item: SetupItem, cost: number) {
-      const state = this.state$.getValue();
+      const s = this.state$.getValue();
       let lvl = 0;
-      if(item === SetupItem.CHAIR) lvl = state.freelanceUpgrades.chairLevel;
-      if(item === SetupItem.SCREEN) lvl = state.freelanceUpgrades.screenLevel;
-      if(item === SetupItem.COFFEE) lvl = state.freelanceUpgrades.coffeeLevel;
-      if(item === SetupItem.PC) lvl = state.freelanceUpgrades.pcLevel;
+      if(item === SetupItem.CHAIR) lvl = s.freelanceUpgrades.chairLevel;
+      if(item === SetupItem.SCREEN) lvl = s.freelanceUpgrades.screenLevel;
+      if(item === SetupItem.COFFEE) lvl = s.freelanceUpgrades.coffeeLevel;
+      if(item === SetupItem.PC) lvl = s.freelanceUpgrades.pcLevel;
       if (lvl >= 1) return;
       if (this.spendMoney(cost)) {
-          const up = { ...state.freelanceUpgrades };
+          const up = { ...s.freelanceUpgrades };
           switch(item) {
               case SetupItem.CHAIR: up.chairLevel = 1; break;
               case SetupItem.SCREEN: up.screenLevel = 1; break;
@@ -157,63 +249,54 @@ export class GameStateService {
               case SetupItem.PC: up.pcLevel = 1; break;
           }
           this.updateState({ freelanceUpgrades: up });
-          this.saveState();
+          this.saveLocalState();
       }
   }
 
   getEmployeeConfig(role: EmployeeRole) { return EMPLOYEE_CONFIGS[role]; }
-  
+  getNextHireCost(companyId: string, role: EmployeeRole): number {
+    const c = this.state$.getValue().companies.find(x => x.id === companyId);
+    if(!c) return 0;
+    return Math.floor(EMPLOYEE_CONFIGS[role].baseCost * Math.pow(1.5, c.employees.filter(e => e.role === role).length));
+  }
+
   hireEmployee(companyId: string, role: EmployeeRole) {
     const cost = this.getNextHireCost(companyId, role);
     if (this.spendMoney(cost)) {
-      const state = this.state$.getValue();
-      const newEmp: Employee = { id: Math.random().toString(36).substr(2, 9), role, hiredAt: Date.now(), dailySalary: EMPLOYEE_CONFIGS[role].baseDailySalary, efficiency: 1, isPaused: false };
-      const updatedCompanies = state.companies.map(c => c.id === companyId ? { ...c, employees: [...c.employees, newEmp] } : c);
-      this.updateState({ companies: updatedCompanies });
-      this.saveState();
-    }
-  }
-
-  upgradeEmployeeSetup(companyId: string, employeeId: string, cost: number) {
-    if (this.spendMoney(cost)) {
-      const state = this.state$.getValue();
-      const updatedCompanies = state.companies.map(c => c.id === companyId ? { ...c, employees: c.employees.map(e => e.id === employeeId ? { ...e, efficiency: e.efficiency + 1 } : e) } : c);
-      this.updateState({ companies: updatedCompanies });
-      this.saveState();
-    }
-  }
-
-  toggleEmployeePause(companyId: string, employeeId: string) {
-      const state = this.state$.getValue();
-      const updatedCompanies = state.companies.map(c => c.id === companyId ? { ...c, employees: c.employees.map(e => e.id === employeeId ? { ...e, isPaused: !e.isPaused } : e) } : c);
-      this.updateState({ companies: updatedCompanies });
-  }
-
-  getNextHireCost(companyId: string, role: EmployeeRole): number {
-    const state = this.state$.getValue();
-    const company = state.companies.find(x => x.id === companyId);
-    if(!company) return 0;
-    const count = company.employees.filter(e => e.role === role).length;
-    return Math.floor(EMPLOYEE_CONFIGS[role].baseCost * Math.pow(1.5, count));
-  }
-  
-  getTotalEmployeePower(type: JobType, role: EmployeeRole): number { 
       const s = this.state$.getValue();
-      const c = s.companies.find(x => x.type === type);
-      if (!c) return 0;
-      return c.employees.filter(e => e.role === role).length;
+      const newEmp: Employee = { id: Math.random().toString(36).substr(2, 9), role, hiredAt: Date.now(), dailySalary: EMPLOYEE_CONFIGS[role].baseDailySalary, efficiency: 1, isPaused: false };
+      this.updateState({ companies: s.companies.map(c => c.id === companyId ? { ...c, employees: [...c.employees, newEmp] } : c) });
+      this.saveLocalState();
+    }
+  }
+
+  upgradeEmployeeSetup(companyId: string, empId: string, cost: number) {
+    if (this.spendMoney(cost)) {
+        const s = this.state$.getValue();
+        this.updateState({ companies: s.companies.map(c => c.id === companyId ? { ...c, employees: c.employees.map(e => e.id === empId ? { ...e, efficiency: e.efficiency + 1 } : e) } : c) });
+        this.saveLocalState();
+    }
+  }
+
+  toggleEmployeePause(companyId: string, empId: string) {
+      const s = this.state$.getValue();
+      this.updateState({ companies: s.companies.map(c => c.id === companyId ? { ...c, employees: c.employees.map(e => e.id === empId ? { ...e, isPaused: !e.isPaused } : e) } : c) });
+  }
+
+  getTotalEmployeePower(type: JobType, role: EmployeeRole): number { 
+      return this.state$.getValue().companies.find(x => x.type === type)?.employees.filter(e => e.role === role).length || 0;
   }
 
   addMoney(amount: number) { 
-      const state = this.state$.getValue(); 
-      const stats = { ...(state.dailyStats || { day: state.day, revenue: 0, expenses: 0, customersServed: 0 }) };
+      const s = this.state$.getValue(); 
+      const stats = { ...(s.dailyStats || { day: s.day, revenue: 0, expenses: 0, customersServed: 0 }) };
       if (amount > 0) stats.revenue += amount;
-      this.updateState({ money: state.money + amount, totalMoneyEarned: amount > 0 ? state.totalMoneyEarned + amount : state.totalMoneyEarned, dailyStats: stats }); 
+      this.updateState({ money: s.money + amount, totalMoneyEarned: amount > 0 ? s.totalMoneyEarned + amount : s.totalMoneyEarned, dailyStats: stats }); 
   }
   
   spendMoney(amount: number): boolean { 
-      const state = this.state$.getValue(); 
-      if (state.money >= amount) { this.updateState({ money: state.money - amount }); return true; } 
+      const s = this.state$.getValue(); 
+      if (s.money >= amount) { this.updateState({ money: s.money - amount }); return true; } 
       return false; 
   }
 
@@ -242,17 +325,23 @@ export class GameStateService {
            if (c.type === JobType.FREELANCE_DEV) {
                c.employees.forEach(e => { 
                  if (!e.isPaused) {
+                    let gain = 0;
                     if (e.role === EmployeeRole.DEV_JUNIOR) {
                         const chance = 0.05 + (e.efficiency * 0.01); 
                         if (Math.random() < chance) {
-                            total += 100 * e.efficiency; 
+                            gain = 100 * e.efficiency;
                         }
                     } 
                     else if (e.role === EmployeeRole.DEV_SENIOR) {
                         const chance = 0.02 + (e.efficiency * 0.005);
                         if (Math.random() < chance) {
-                            total += 1500 * e.efficiency; 
+                            gain = 1500 * e.efficiency;
                         }
+                    }
+                    if(gain > 0) {
+                        total += gain;
+                        const currentStats = s.stats || { foodtruckIncome: 0, freelanceIncome: 0, factoryIncome: 0, totalPlayTimeMinutes: 0 };
+                        this.updateState({ stats: { ...currentStats, freelanceIncome: currentStats.freelanceIncome + gain } });
                     }
                  }
                });
@@ -268,31 +357,55 @@ export class GameStateService {
     }
   }
 
-  resetGame() { localStorage.removeItem(this.SAVE_KEY); window.location.reload(); }
-  completeIntro() { const s=this.state$.getValue(); const c=s.companies.map(x=>x.id==='3'?{...x, unlocked:true}:x); this.updateState({hasCompletedIntro:true, money:10000, companies:c}); this.saveState(); }
+  // CORRECTION ICI : updateState en premier, PUIS saveLocalState et SURTOUT saveToCloud
+  completeIntro() { 
+      const s=this.state$.getValue(); 
+      const c=s.companies.map(x=>x.id==='3'?{...x, unlocked:true}:x); 
+      
+      this.updateState({hasCompletedIntro:true, money:10000, companies:c}); 
+      
+      this.saveLocalState();
+      this.saveToCloud(); // IMPORTANT : On force la sauvegarde cloud ici pour dire "Intro finie"
+  }
+
   setTimeOfDay(t: number) { this.updateState({timeOfDay:t}); }
-  unlockIngredientByService(i:string){ const s=this.state$.getValue(); if(!s.foodtruckUpgrades.unlockedIngredients.includes(i)){ const u={...s.foodtruckUpgrades}; u.unlockedIngredients.push(i); this.updateState({foodtruckUpgrades:u}); this.saveState(); }}
-  updateMaxServiceReached(l:number){ const s=this.state$.getValue(); if(l>s.foodtruckUpgrades.maxServiceReached){ const u={...s.foodtruckUpgrades, maxServiceReached:l}; this.updateState({foodtruckUpgrades:u}); this.saveState(); }}
+  unlockIngredientByService(i:string){ const s=this.state$.getValue(); if(!s.foodtruckUpgrades.unlockedIngredients.includes(i)){ const u={...s.foodtruckUpgrades}; u.unlockedIngredients.push(i); this.updateState({foodtruckUpgrades:u}); this.saveLocalState(); }}
+  updateMaxServiceReached(l:number){ const s=this.state$.getValue(); if(l>s.foodtruckUpgrades.maxServiceReached){ const u={...s.foodtruckUpgrades, maxServiceReached:l}; this.updateState({foodtruckUpgrades:u}); this.saveLocalState(); }}
   initFoodtruckMastery(): any { const m:any={}; Object.values(BurgerIngredient).forEach(i=>m[i]={level:1,xp:0,xpMax:5}); return m; }
-  updateIngredientMastery(m:any) { this.updateState({foodtruckMastery:m}); this.saveState(); }
+  updateIngredientMastery(m:any) { this.updateState({foodtruckMastery:m}); this.saveLocalState(); }
   incrementCustomersServed() { const s=this.state$.getValue(); const d={...s.dailyStats}; d.customersServed++; this.updateState({dailyStats:d}); }
 
   private updateState(c:Partial<GameState>) { this.state$.next({...this.state$.getValue(), ...c}); }
-  private saveState() { localStorage.setItem(this.SAVE_KEY, JSON.stringify(this.state$.getValue())); }
-  private loadState() { 
+  private saveLocalState() { localStorage.setItem(this.SAVE_KEY, JSON.stringify(this.state$.getValue())); }
+  private loadLocalState() { 
       const s=localStorage.getItem(this.SAVE_KEY); 
       if(s) { 
           try { 
               const l=JSON.parse(s); 
-              const m={...this.defaultState, ...l}; 
-              if(!m.freelanceUpgrades) m.freelanceUpgrades=this.defaultState.freelanceUpgrades;
-              // Migration de sauvegarde
-              if(!m.freelanceUpgrades.ownedThemes) {
-                  m.freelanceUpgrades.ownedThemes = ['DEFAULT'];
-                  m.freelanceUpgrades.activeThemeId = 'DEFAULT';
-              }
-              this.state$.next(m); 
-          } catch(e) { console.error(e); } 
+              this.state$.next({...this.defaultState, ...l}); 
+              this.isLoading$.next(false); // On a chargé quelque chose, on arrête le loading
+          } catch(e) {} 
       } 
+  }
+
+  async saveToCloud() {
+      const s = this.state$.getValue();
+      const user = this.firebaseService.authInstance.currentUser;
+      
+      // Ne pas sauvegarder si on n'a rien à sauvegarder (compte anonyme vide)
+      if (user?.isAnonymous && (!s.hasCompletedIntro || s.totalMoneyEarned <= 2000)) return;
+
+      const stats = s.stats || { foodtruckIncome: 0, freelanceIncome: 0, factoryIncome: 0, totalPlayTimeMinutes: 0 };
+      const updatedStats = { ...stats, totalPlayTimeMinutes: (stats.totalPlayTimeMinutes || 0) + 1 };
+      
+      // On update le state local pour le temps de jeu
+      this.updateState({ stats: updatedStats });
+      
+      // On envoie
+      await this.firebaseService.saveProgress({ ...s, stats: updatedStats });
+  }
+
+  async connectOnline() {
+      if (!this.firebaseService.authInstance.currentUser) await this.firebaseService.loginAnonymous();
   }
 }
