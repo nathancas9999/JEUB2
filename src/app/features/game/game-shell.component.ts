@@ -4,7 +4,7 @@ import { map, filter, take } from 'rxjs/operators';
 import { GameStateService } from '../../core/services/game-state.service';
 import { SoundService } from '../../core/services/sound.service';
 import { FirebaseService, MarketItem } from '../../core/services/firebase.service';
-import { GameState, Company, JobType, DailyStats, SetupItem, Holding, EmployeeRole } from '../../models/game-models'; // <--- AJOUT DE EmployeeRole ICI
+import { GameState, Company, JobType, DailyStats, SetupItem, Holding, EmployeeRole } from '../../models/game-models';
 import { IDE_THEMES, IdeTheme } from '../../core/config/themes.config';
 
 interface PrestigeItem { id: string; name: string; icon: string; cost: number; desc: string; }
@@ -24,14 +24,14 @@ export class GameShellComponent implements OnInit {
   isAdminOpen = false;
   isOnlineTabOpen = false;
   
-  // NOUVEAU : Gestion de l'UI Online
+  // États pour les modales Online
   activeTab: 'LEADERBOARD' | 'MARKET' | 'GUILD' = 'LEADERBOARD';
-  selectedPlayer: any = null; // Pour afficher les détails d'un joueur
+  selectedPlayer: any = null; 
   tickerMessages: string[] = ["Bienvenue sur le marché mondial !", "Le Bitcoin est en chute libre...", "Qui sera le prochain CEO de l'année ?"];
   tickerIndex = 0;
   
   newUsername = '';
-  newHoldingName = ''; // Pour créer une guilde
+  newHoldingName = ''; 
   
   JobType = JobType;
   SetupItem = SetupItem;
@@ -39,7 +39,7 @@ export class GameShellComponent implements OnInit {
 
   leaderboard: any[] = [];
   marketItems: MarketItem[] = [];
-  holdings: Holding[] = []; // Feature 22
+  holdings: Holding[] = [];
 
   prestigeItems: PrestigeItem[] = [
     { id: 'WATCH', name: 'Rolex en Or', icon: '⌚', cost: 5000, desc: 'Le temps c\'est de l\'argent.' },
@@ -74,7 +74,6 @@ export class GameShellComponent implements OnInit {
        this.soundService.playSuccess();
     });
 
-    // Feature 23: Ticker automatique
     interval(5000).subscribe(() => {
         this.tickerIndex = (this.tickerIndex + 1) % this.tickerMessages.length;
     });
@@ -82,7 +81,6 @@ export class GameShellComponent implements OnInit {
 
   // --- ONLINE UI HELPERS ---
   getRankClass(index: number) {
-      // Feature 4: Effets de rareté
       if (index === 0) return 'bg-yellow-500/20 border-yellow-500/50 text-yellow-100 shadow-[0_0_15px_rgba(234,179,8,0.3)]';
       if (index === 1) return 'bg-slate-300/10 border-slate-300/50 text-slate-200';
       if (index === 2) return 'bg-amber-700/10 border-amber-700/50 text-amber-200';
@@ -124,7 +122,6 @@ export class GameShellComponent implements OnInit {
     if (this.isGlobalShopOpen) this.soundService.playSoftPop();
   }
 
-  // ... (Méthodes thèmes, admin, etc. inchangées) ...
   isThemeOwned(state: GameState, themeId: string): boolean { return state.freelanceUpgrades.ownedThemes.includes(themeId); }
   isActiveTheme(state: GameState, themeId: string): boolean { return state.freelanceUpgrades.activeThemeId === themeId; }
   buyOrEquipTheme(theme: IdeTheme) {
@@ -155,7 +152,6 @@ export class GameShellComponent implements OnInit {
   refreshOnlineData() { 
     this.firebaseService.getLeaderboard().subscribe((data: any) => {
         this.leaderboard = data;
-        // Met à jour le ticker avec le leader
         if (this.leaderboard.length > 0) this.tickerMessages.push(`👑 ${this.leaderboard[0].username} domine le classement !`);
     }); 
     this.firebaseService.getMarketItems().subscribe((data: any) => this.marketItems = data); 
@@ -184,7 +180,6 @@ export class GameShellComponent implements OnInit {
             const result = await this.firebaseService.buyItem(item);
             if (result === 'SUCCESS') {
                 this.gameStateService.addMoney(-item.price); 
-                // Logique simplifiée : on recrute un dev senior
                 if (item.type === 'Dev Senior') this.gameStateService.hireEmployee('2', EmployeeRole.DEV_SENIOR); 
                 this.soundService.playSuccess(); 
                 this.refreshOnlineData();
@@ -200,7 +195,6 @@ export class GameShellComponent implements OnInit {
     }); 
   }
 
-  // ... (Helpers Setup, Foodtruck, Prestige, etc.) ...
   buySetup(item: string) { const cost = this.getSetupCost(item); this.gameState$.pipe(take(1)).subscribe(state => { if (state.money >= cost) { this.gameStateService.buySetupUpgrade(item as SetupItem, cost); this.soundService.playSuccess(); } else this.soundService.playError(); }); }
   getSetupCost(item: string): number { return { CHAIR: 2000, SCREEN: 5000, COFFEE: 1500, PC: 20000 }[item] || 0; }
   getSetupLevel(state: GameState, item: string): number { if (!state.freelanceUpgrades) return 0; switch(item) { case 'CHAIR': return state.freelanceUpgrades.chairLevel; case 'SCREEN': return state.freelanceUpgrades.screenLevel; case 'COFFEE': return state.freelanceUpgrades.coffeeLevel; case 'PC': return state.freelanceUpgrades.pcLevel; default: return 0; } }

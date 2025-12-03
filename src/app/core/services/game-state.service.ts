@@ -50,7 +50,6 @@ export class GameStateService {
   public gameState$ = this.state$.asObservable();
 
   constructor(private firebaseService: FirebaseService) {
-    // On commence par charger le localstorage pour avoir quelque chose immédiatement
     this.loadLocalState();
     
     interval(this.TICK_RATE_MS).subscribe(() => this.gameLoop());
@@ -59,17 +58,16 @@ export class GameStateService {
     this.firebaseService.user$.subscribe(user => {
         if (user) {
             // Si on est déjà dans le jeu (pas sur l'écran titre), on charge en arrière-plan
-            // Si on est sur l'écran titre, c'est lui qui gérera le flux
-            this.loadCloudDataForUser(user);
+            if (!document.querySelector('app-title-screen')) {
+                this.loadCloudDataForUser(user);
+            }
         } else {
-            // Pas d'user -> Fin du chargement (mode invité par défaut)
             this.isLoading$.next(false);
         }
     });
   }
 
-  // --- NOUVEAU : GESTION CRÉATION COMPTE ---
-  
+  // --- GESTION CRÉATION COMPTE ---
   async checkIfUserHasSave(user: any): Promise<boolean> {
       const save = await this.firebaseService.loadProgress();
       return !!save;
@@ -95,10 +93,9 @@ export class GameStateService {
       this.isLoading$.next(false);
   }
 
-  // ----------------------------------------
-
+  // --- CHARGEMENT ---
   async loadCloudDataForUser(user: any) {
-      this.isLoading$.next(true); // Début chargement
+      this.isLoading$.next(true);
       const cloudSave = await this.firebaseService.loadProgress();
       
       if (cloudSave) {
@@ -106,11 +103,9 @@ export class GameStateService {
           this.state$.next(cloudSave);
           this.saveLocalState();
       } else {
-          console.log("🆕 Compte vide (Reload) -> Reset.");
-          // Si on est déjà connecté mais qu'il n'y a pas de save, c'est bizarre.
-          // On ne fait rien de destructif ici, on laisse l'état par défaut.
+          console.log("🆕 Compte vide (Reload).");
       }
-      this.isLoading$.next(false); // Fin chargement
+      this.isLoading$.next(false);
   }
 
   logoutAndClear() {
@@ -132,10 +127,13 @@ export class GameStateService {
       if(saveToCloud) this.saveToCloud();
   }
 
+  // --- CORRECTION DU TYPE ICI ---
   updateUsername(newName: string, autoSave = true) {
       const s = this.state$.getValue();
+      // On utilise une valeur par défaut sûre
       const currentUser = s.user || this.defaultState.user;
       
+      // On reconstruit l'objet UserProfile explicitement pour éviter les erreurs de type
       const newUser: UserProfile = { 
           username: newName,
           title: currentUser?.title || 'Débutant',
@@ -357,15 +355,12 @@ export class GameStateService {
     }
   }
 
-  // CORRECTION ICI : updateState en premier, PUIS saveLocalState et SURTOUT saveToCloud
   completeIntro() { 
       const s=this.state$.getValue(); 
       const c=s.companies.map(x=>x.id==='3'?{...x, unlocked:true}:x); 
-      
       this.updateState({hasCompletedIntro:true, money:10000, companies:c}); 
-      
       this.saveLocalState();
-      this.saveToCloud(); // IMPORTANT : On force la sauvegarde cloud ici pour dire "Intro finie"
+      this.saveToCloud();
   }
 
   setTimeOfDay(t: number) { this.updateState({timeOfDay:t}); }
@@ -383,7 +378,7 @@ export class GameStateService {
           try { 
               const l=JSON.parse(s); 
               this.state$.next({...this.defaultState, ...l}); 
-              this.isLoading$.next(false); // On a chargé quelque chose, on arrête le loading
+              this.isLoading$.next(false);
           } catch(e) {} 
       } 
   }
@@ -391,17 +386,12 @@ export class GameStateService {
   async saveToCloud() {
       const s = this.state$.getValue();
       const user = this.firebaseService.authInstance.currentUser;
-      
-      // Ne pas sauvegarder si on n'a rien à sauvegarder (compte anonyme vide)
       if (user?.isAnonymous && (!s.hasCompletedIntro || s.totalMoneyEarned <= 2000)) return;
 
       const stats = s.stats || { foodtruckIncome: 0, freelanceIncome: 0, factoryIncome: 0, totalPlayTimeMinutes: 0 };
       const updatedStats = { ...stats, totalPlayTimeMinutes: (stats.totalPlayTimeMinutes || 0) + 1 };
       
-      // On update le state local pour le temps de jeu
       this.updateState({ stats: updatedStats });
-      
-      // On envoie
       await this.firebaseService.saveProgress({ ...s, stats: updatedStats });
   }
 

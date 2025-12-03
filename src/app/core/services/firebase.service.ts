@@ -5,6 +5,7 @@ import { Observable, from } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { GameState, Holding } from '../../models/game-models';
 
+// Déclaration pour éviter les erreurs de compilation si la variable n'existe pas
 declare var __initial_auth_token: string | undefined;
 
 export interface MarketItem {
@@ -66,7 +67,7 @@ export class FirebaseService {
       await setDoc(userRef, {
         ...state,
         leaderboardStats: {
-          money: state.money, // MODIFICATION : On utilise state.money (Solde Actuel) au lieu de totalMoneyEarned
+          money: state.money, // On utilise l'argent ACTUEL
           prestige: state.freelanceUpgrades?.bossBeaten || 0,
           username: state.user?.username || 'Anonyme',
           creationDate: state.user?.creationDate || Date.now(),
@@ -116,6 +117,7 @@ export class FirebaseService {
     await addDoc(collection(this.firestore, 'market'), item);
   }
 
+  // C'est cette fonction qui posait problème dans ton image
   async buyItem(item: MarketItem): Promise<string> {
     if (!item.id) return 'ERROR';
     
