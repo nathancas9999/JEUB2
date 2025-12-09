@@ -1,5 +1,6 @@
 import { NgModule, LOCALE_ID } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations'; // 👈 IMPORTANT POUR LES ANIMATIONS
 import { registerLocaleData } from '@angular/common';
 import localeFr from '@angular/common/locales/fr';
 
@@ -22,12 +23,13 @@ registerLocaleData(localeFr);
   ],
   imports: [
     BrowserModule,
+    BrowserAnimationsModule, // 👈 AJOUTÉ ICI
     AppRoutingModule,
-    GameModule // Importe le jeu (et donc app-game-shell)
+    GameModule // Contient le Blackjack et les autres jeux
   ],
   providers: [
     { provide: LOCALE_ID, useValue: 'fr-FR' },
-    // CORRECTION : Les services Firebase doivent être ici, dans 'providers'
+    // Configuration Firebase
     provideFirebaseApp(() => initializeApp(environment.firebase)),
     provideAuth(() => getAuth()),
     provideFirestore(() => getFirestore())

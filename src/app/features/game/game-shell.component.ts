@@ -24,8 +24,8 @@ export class GameShellComponent implements OnInit {
   isAdminOpen = false;
   isOnlineTabOpen = false;
   
-  // États pour les modales Online
-  activeTab: 'LEADERBOARD' | 'MARKET' | 'GUILD' = 'LEADERBOARD';
+  // MODIFICATION : Ajout de 'PROFILE' dans les onglets possibles
+  activeTab: 'LEADERBOARD' | 'MARKET' | 'GUILD' | 'PROFILE' = 'LEADERBOARD';
   selectedPlayer: any = null; 
   tickerMessages: string[] = ["Bienvenue sur le marché mondial !", "Le Bitcoin est en chute libre...", "Qui sera le prochain CEO de l'année ?"];
   tickerIndex = 0;
@@ -65,8 +65,11 @@ export class GameShellComponent implements OnInit {
       if (!this.selectedCompany && c) this.selectedCompany = c;
     });
 
-    this.gameState$.pipe(take(1)).subscribe(state => {
-        if (state.user) this.newUsername = state.user.username;
+    // MODIFICATION : On initialise le champ d'édition avec le pseudo actuel
+    this.gameState$.subscribe(state => {
+        if (state.user && !this.newUsername) {
+            this.newUsername = state.user.username;
+        }
     });
 
     this.gameStateService.dayEnded$.subscribe(stats => {
@@ -104,7 +107,6 @@ export class GameShellComponent implements OnInit {
       });
   }
 
-  // --- ACTIONS EXISTANTES ---
   logout() {
     if(confirm("Se déconnecter ?")) this.gameStateService.logoutAndClear();
   }
@@ -113,7 +115,8 @@ export class GameShellComponent implements OnInit {
       if (this.newUsername?.trim()) {
           this.gameStateService.updateUsername(this.newUsername.trim());
           this.soundService.playSuccess();
-          setTimeout(() => this.refreshOnlineData(), 1000);
+          // Note : Pas besoin de rafraîchir les données online ici, la modif est locale pour l'instant
+          // Elle sera envoyée lors de la prochaine sauvegarde auto ou fermeture
       }
   }
 

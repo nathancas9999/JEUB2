@@ -30,22 +30,25 @@ import { SoundService } from '../../core/services/sound.service';
             <button (click)="login()" 
                     class="group relative px-8 py-4 bg-white text-slate-900 font-black text-xl rounded-full shadow-[0_0_40px_rgba(255,255,255,0.3)] hover:shadow-[0_0_60px_rgba(255,255,255,0.5)] hover:scale-105 transition-all duration-300 flex items-center gap-3">
                 <span class="text-2xl">G</span>
-                <span>JOUER (CONNEXION)</span>
+                <span>SE CONNECTER AVEC GOOGLE</span>
                 <div class="absolute inset-0 rounded-full border-2 border-white opacity-0 group-hover:opacity-100 group-hover:scale-110 transition-all duration-500"></div>
             </button>
             
-            <p class="text-slate-600 text-xs mt-4 max-w-xs text-center">
-                Tente Google Auth, sinon passe automatiquement en mode Invité.
+            <p class="text-red-400 font-bold text-xs mt-4 max-w-xs text-center bg-red-900/20 p-2 rounded border border-red-500/30" *ngIf="errorMessage">
+                ❌ {{ errorMessage }}
+            </p>
+            
+            <p class="text-slate-600 text-xs mt-4 max-w-xs text-center" *ngIf="!errorMessage">
+               Reprenez votre partie là où vous l'avez laissée.
             </p>
         </div>
 
       </div>
 
-      <!-- MODALE CHOIX DU PSEUDO (NOUVEAU) -->
       <div *ngIf="isChoosingName" class="z-20 bg-slate-900 border border-slate-700 p-8 rounded-2xl shadow-2xl flex flex-col items-center gap-6 animate-fade-in max-w-md w-full mx-4">
           <div class="text-4xl">👋</div>
-          <h2 class="text-2xl font-black text-white text-center">Bienvenue, Futur CEO !</h2>
-          <p class="text-slate-400 text-center text-sm">C'est votre première fois ici. Comment devons-nous vous appeler ?</p>
+          <h2 class="text-2xl font-black text-white text-center">Nouveau CEO détecté !</h2>
+          <p class="text-slate-400 text-center text-sm">Aucune sauvegarde trouvée. Choisissez votre pseudo :</p>
           
           <input type="text" [(ngModel)]="chosenUsername" placeholder="Votre Pseudo..." 
                  class="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-3 text-white font-bold text-center focus:border-blue-500 focus:outline-none transition-colors"
@@ -56,11 +59,8 @@ import { SoundService } from '../../core/services/sound.service';
               COMMENCER L'AVENTURE 🚀
           </button>
       </div>
-
-      <div class="absolute bottom-4 text-slate-700 text-xs font-mono">
-        v1.0.0 • Made with Angular & Firebase
-      </div>
-
+      
+      <div class="absolute bottom-4 text-slate-700 text-xs font-mono">v1.1.0 • Save Cloud Sync</div>
     </div>
   `,
   styles: [`
@@ -79,7 +79,8 @@ export class TitleScreenComponent {
   
   isChoosingName = false;
   chosenUsername = '';
-  pendingUser: any = null; // Stocke l'utilisateur en attente
+  pendingUser: any = null;
+  errorMessage = '';
 
   constructor(
     private firebase: FirebaseService, 
@@ -89,51 +90,47 @@ export class TitleScreenComponent {
 
   async login() {
     this.sound.playSoftPop();
+    this.errorMessage = '';
     
-    // 1. Tenter Google
     try {
       await this.firebase.loginGoogle();
-    } catch (e) {
-      console.log("Google Auth indisponible, bascule vers Anonyme...");
-    }
+      
+      const user = this.firebase.authInstance.currentUser;
+      if (user) {
+          // On vérifie s'il y a déjà une sauvegarde Cloud
+          const hasSave = await this.gameState.checkIfUserHasSave(user);
+          
+          if (hasSave) {
+              // ANCIEN JOUEUR : On charge et on lance
+              console.log("💾 Sauvegarde trouvée ! Chargement...");
+              await this.gameState.loadCloudDataForUser(user);
+              // Le gameStateService va mettre à jour le state, et le GameShell va automatiquement switcher
+          } else {
+              // NOUVEAU JOUEUR : On demande le pseudo
+              console.log("🆕 Nouvelle partie détectée.");
+              this.pendingUser = user;
+              this.chosenUsername = user.displayName || ''; 
+              this.isChoosingName = true;
+          }
+      }
 
-    // 2. Vérifier si c'est un nouveau compte
-    const user = this.firebase.authInstance.currentUser;
-    if (user) {
-        // On vérifie s'il a déjà une sauvegarde
-        const hasSave = await this.gameState.checkIfUserHasSave(user);
-        
-        if (!hasSave) {
-            // C'est un nouveau ! On affiche l'écran de choix de pseudo
-            this.pendingUser = user;
-            this.chosenUsername = user.displayName || ''; // Pré-remplir avec Google si dispo
-            this.isChoosingName = true;
-            return; // On arrête ici, on attend la confirmation
-        }
+    } catch (e: any) {
+      console.error("Erreur Login", e);
+      if (e.code === 'auth/popup-closed-by-user') {
+          this.errorMessage = "Connexion annulée.";
+      } else {
+          this.errorMessage = "Erreur connexion : " + e.message;
+      }
+      this.sound.playError();
     }
-
-    // 3. Si c'est un ancien, on connecte direct
-    this.finalizeLogin();
   }
 
   async confirmName() {
       if (!this.chosenUsername.trim()) return;
-      
       this.sound.playSuccess();
-      
-      // On met à jour le profil (pseudo) AVANT de lancer le jeu
       if (this.pendingUser) {
           await this.gameState.initializeNewUser(this.pendingUser, this.chosenUsername);
       }
-      
-      this.finalizeLogin();
-  }
-
-  async finalizeLogin() {
-      try {
-          await this.gameState.connectOnline();
-      } catch(e) {
-          console.error("Erreur fatale", e);
-      }
+      // Une fois initialisé, le GameShell prendra le relais
   }
 }

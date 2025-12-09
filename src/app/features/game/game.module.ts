@@ -8,7 +8,8 @@ import { GameShellComponent } from './game-shell.component';
 import { IntroGameComponent } from './intro-game.component';
 import { FoodtruckGameComponent } from './mini-games/foodtruck-game.component';
 import { FactoryGameComponent } from './mini-games/factory-game.component';
-import { ClothingStoreGameComponent } from './mini-games/clothing-store-game.component';
+// MODIF : On importe le Blackjack
+import { BlackjackGameComponent } from './mini-games/blackjack-game'; 
 import { FreelanceDevGameComponent } from './mini-games/freelance-dev-game.component';
 import { EmployeeManagerComponent } from './components/employee-manager/employee-manager.component';
 import { TitleScreenComponent } from './title-screen.component';
@@ -19,7 +20,7 @@ import { TitleScreenComponent } from './title-screen.component';
     IntroGameComponent,
     FoodtruckGameComponent,
     FactoryGameComponent,
-    ClothingStoreGameComponent,
+    BlackjackGameComponent, 
     FreelanceDevGameComponent,
     EmployeeManagerComponent,
     TitleScreenComponent 

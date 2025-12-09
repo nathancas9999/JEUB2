@@ -1,3 +1,5 @@
+// Fichier : src/app/features/game/mini-games/freelance-dev-game.component.ts
+
 import { Component, OnInit, HostListener, OnDestroy, ElementRef, ViewChild, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { GameStateService } from '../../../core/services/game-state.service';
 import { SoundService } from '../../../core/services/sound.service';
@@ -11,11 +13,12 @@ interface WorkerState { currentMission: Mission | null; targetText: string; type
 @Component({
   selector: 'app-freelance-dev-game',
   standalone: false,
-  changeDetection: ChangeDetectionStrategy.OnPush, // OPTIMISATION PERFORMANCE
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="h-full font-sans flex flex-col relative overflow-hidden select-none transition-colors duration-500"
          [ngClass]="[activeTheme.bgClass, activeTheme.textClass]"
          (click)="focusInput()">
+         
       <div class="p-4 border-b flex justify-between items-center shadow-md z-10 relative" [ngClass]="activeTheme.borderClass">
         <div class="flex items-center gap-4">
           <div class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
@@ -47,12 +50,14 @@ interface WorkerState { currentMission: Mission | null; targetText: string; type
             </div>
         </div>
       </div>
+
       <div class="absolute top-20 right-4 z-20 pointer-events-none flex flex-col gap-2 items-end">
           <div *ngFor="let notif of notifications" class="backdrop-blur px-3 py-1 rounded border text-xs shadow-lg animate-fade-out-up"
                [ngClass]="[activeTheme.borderClass, activeTheme.accentClass, activeTheme.bgClass]">
               {{ notif }}
           </div>
       </div>
+
       <div *ngIf="!activeMission" class="flex-1 p-8 overflow-y-auto custom-scroll">
         <div class="max-w-4xl mx-auto">
           <h2 class="text-3xl font-black mb-2 tracking-tight flex items-center gap-3">📜 Vos Contrats</h2>
@@ -82,13 +87,16 @@ interface WorkerState { currentMission: Mission | null; targetText: string; type
           </div>
         </div>
       </div>
+
       <div *ngIf="activeMission" class="flex-1 flex flex-col relative transition-colors duration-500">
         <div class="absolute inset-0 opacity-10 pointer-events-none" [ngClass]="activeTheme.bgClass"></div>
         <div #gameZone class="flex-1 p-8 flex flex-col justify-center items-center relative overflow-hidden">
+            
             <div class="absolute top-10 right-10 flex flex-col items-end transition-all duration-200 z-30" [class.opacity-0]="currentCombo < 2">
                 <div class="text-6xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-400" [class.from-amber-400]="currentCombo >= 50">x{{ currentCombo }}</div>
                 <div class="text-xs font-bold opacity-50 uppercase tracking-widest">COMBO</div>
             </div>
+
             <div class="relative z-20 w-full max-w-5xl text-center leading-relaxed select-none cursor-text transition-transform duration-100" [class.shake-anim]="hasError">
                 <div class="text-4xl font-sans font-medium tracking-normal opacity-80">
                   <span *ngFor="let token of currentDisplayTokens" class="inline-block" [class.whitespace-nowrap]="!token.isSpace">
@@ -100,12 +108,15 @@ interface WorkerState { currentMission: Mission | null; targetText: string; type
                 </div>
                 <div *ngIf="isFinishedButWrong" class="mt-8 text-red-500 font-bold text-xl animate-bounce">CORRIGEZ !</div>
             </div>
+
             <div class="absolute bottom-8 flex flex-col items-center z-30">
                 <div class="text-5xl font-mono font-black transition-colors duration-300 drop-shadow-lg" [class.text-red-500]="timeLeft <= 5">{{ timeLeft | number:'1.1-1' }}s</div>
             </div>
-            <input #hiddenInput type="text" class="absolute opacity-0 top-0 left-0 h-full w-full cursor-text" (input)="onInput($event)" autofocus autocomplete="off" spellcheck="false">
+
+            <input #hiddenInput type="text" class="absolute opacity-0 top-0 left-0 h-full w-full cursor-text" (input)="onInput($event)" (blur)="focusInput()" autofocus autocomplete="off" spellcheck="false">
         </div>
       </div>
+
       <div *ngIf="isStaffOpen" class="absolute inset-0 bg-slate-950/95 z-50 flex items-center justify-center backdrop-blur-sm animate-fade-in" (click)="$event.stopPropagation()">
          <div class="bg-slate-900 border border-slate-700 w-full max-w-4xl h-[85%] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
             <div class="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900">
@@ -156,7 +167,7 @@ interface WorkerState { currentMission: Mission | null; targetText: string; type
                              </div>
                              <div class="h-1 w-full bg-black rounded-full mb-2 overflow-hidden" *ngIf="getWorkerState(emp.id) as ws">
                                  <div class="h-full transition-all duration-300" 
-                                      [style.width.%]="ws.currentMission ? (ws.typedText.length / ws.targetText.length * 100) : 0"
+                                      [style.width.%]="(ws.targetText && ws.targetText.length > 0) ? (ws.typedText.length / ws.targetText.length * 100) : 0"
                                       [ngClass]="isTeamBuildingActive ? 'bg-orange-500' : 'bg-blue-500'"></div>
                              </div>
                              <div class="flex flex-col gap-2">
@@ -170,6 +181,7 @@ interface WorkerState { currentMission: Mission | null; targetText: string; type
             </div>
          </div>
       </div>
+
       <div *ngIf="missionResult" class="absolute inset-0 bg-slate-900/90 z-50 flex items-center justify-center backdrop-blur-md animate-fade-in" (click)="$event.stopPropagation()">
         <div class="bg-slate-800 p-8 rounded-2xl border-2 shadow-2xl max-w-sm w-full text-center">
              <div class="text-6xl mb-4">{{ missionResult === 'SUCCESS' ? '🏆' : '💀' }}</div>
@@ -188,7 +200,6 @@ interface WorkerState { currentMission: Mission | null; targetText: string; type
       </div>
     </div>
   `,
-  // (styles: [ ... gardez vos styles originaux ...])
   styles: [`
     .custom-scroll::-webkit-scrollbar { width: 6px; } .custom-scroll::-webkit-scrollbar-track { background: transparent; } .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
     .shake-anim { animation: shake 0.2s cubic-bezier(.36,.07,.19,.97) both; }
@@ -247,10 +258,9 @@ export class FreelanceDevGameComponent implements OnInit, OnDestroy {
 
   get isFinishedButWrong(): boolean { return this.userInput.length === this.currentTargetLine.length && this.userInput !== this.currentTargetLine; }
   
-  // CORRECTION : Utilisation de performance.now() pour un calcul précis
   get currentWpm(): number {
     if (!this.startTime) return 0;
-    const end = this.endTime || performance.now();
+    const end = this.endTime || Date.now();
     const minutes = (end - this.startTime) / 60000;
     if (minutes < 0.001) return 0;
     return Math.floor((this.totalCharsTyped / 5) / minutes);
@@ -291,7 +301,15 @@ export class FreelanceDevGameComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() { this.stopTimer(); this.stopWatching(); if(this.workerInterval) clearInterval(this.workerInterval); }
-  focusInput() { if (!this.isShopOpen && !this.isStaffOpen && !this.watchedEmployee && !this.missionResult && this.activeMission) setTimeout(() => this.hiddenInput?.nativeElement.focus(), 0); }
+  
+  focusInput() { 
+      if (!this.isShopOpen && !this.isStaffOpen && !this.watchedEmployee && !this.missionResult && this.activeMission) {
+          setTimeout(() => {
+              if (this.hiddenInput) this.hiddenInput.nativeElement.focus();
+          }, 0);
+      }
+  }
+
   toggleShop() { 
       this.isShopOpen = !this.isShopOpen; this.isStaffOpen = false; if(!this.isShopOpen) this.focusInput(); 
       this.cdr.markForCheck();
@@ -391,7 +409,7 @@ export class FreelanceDevGameComponent implements OnInit, OnDestroy {
       this.currentCombo = 0; 
       this.maxComboReached = 0; 
       this.totalCharsTyped = 0; 
-      this.startTime = performance.now(); // Utilisation de performance.now()
+      this.startTime = Date.now(); 
       this.endTime = 0; 
       this.isCoffeeActive = false; 
       this.coffeeAvailable = true; 
@@ -405,10 +423,22 @@ export class FreelanceDevGameComponent implements OnInit, OnDestroy {
   
   startTimer() { 
       this.stopTimer(); 
+      let lastTick = Date.now();
+      
       this.timerInterval = setInterval(() => { 
-          if (this.isCoffeeActive) return; 
-          const tick = 0.1 * (1 - (this.chairLevel * 0.2)); 
-          this.timeLeft -= tick; 
+          if (this.isCoffeeActive) {
+              lastTick = Date.now(); // On ignore le temps passé en pause
+              return; 
+          }
+          
+          const now = Date.now();
+          const delta = (now - lastTick) / 1000; // Temps écoulé en secondes
+          lastTick = now;
+
+          const tickMultiplier = 1 - (this.chairLevel * 0.2); // Bonus chaise (max 20% moins vite)
+          
+          this.timeLeft -= (delta * tickMultiplier); 
+          
           if (this.timeLeft <= 0) { 
               this.timeLeft = 0; 
               this.endMission(false); 
@@ -446,7 +476,7 @@ export class FreelanceDevGameComponent implements OnInit, OnDestroy {
   
   endMission(success: boolean) { 
       this.stopTimer(); 
-      this.endTime = performance.now(); 
+      this.endTime = Date.now(); 
       this.missionResult = success ? 'SUCCESS' : 'FAIL'; 
       if (success && this.activeMission) { 
           const base = this.calculateReward(this.activeMission); 

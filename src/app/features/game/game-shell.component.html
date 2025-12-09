@@ -1,6 +1,5 @@
 <app-title-screen *ngIf="!(firebaseService.user$ | async)"></app-title-screen>
 
-<!-- Écran de chargement -->
 <div *ngIf="(gameStateService.isLoading$ | async) && (firebaseService.user$ | async)" class="fixed inset-0 bg-slate-950 flex flex-col items-center justify-center z-[9999]">
     <div class="text-4xl animate-bounce mb-4">🚀</div>
     <div class="text-white font-bold text-xl tracking-widest animate-pulse">CHARGEMENT DE L'EMPIRE...</div>
@@ -8,15 +7,28 @@
 
 <ng-container *ngIf="(firebaseService.user$ | async) && !(gameStateService.isLoading$ | async)">
 
+    <div *ngIf="(firebaseService.invites$ | async) as invites" class="fixed top-4 left-1/2 -translate-x-1/2 z-[1000] flex flex-col gap-2 pointer-events-auto">
+        <div *ngFor="let invite of invites" class="bg-slate-900 border border-purple-500 p-4 rounded-xl shadow-2xl shadow-purple-500/20 flex items-center gap-4 animate-fade-in-down min-w-[300px]">
+            <div class="text-3xl animate-bounce">⚔️</div>
+            <div class="flex-1">
+                <div class="font-bold text-white text-sm">DÉFI DE {{ invite.fromName }}</div>
+                <div class="text-xs text-purple-300">{{ invite.gameType }} • {{ invite.amount }} €</div>
+            </div>
+            <div class="flex gap-2">
+                <button (click)="firebaseService.acceptInvite(invite)" class="bg-green-600 hover:bg-green-500 text-white p-2 rounded-lg text-xs font-bold transition-colors">ACCEPTER</button>
+                <button (click)="firebaseService.declineInvite(invite)" class="bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white p-2 rounded-lg text-xs font-bold transition-colors">✕</button>
+            </div>
+        </div>
+    </div>
+
     <app-intro-game *ngIf="!(gameState$ | async)?.hasCompletedIntro"></app-intro-game>
 
     <div *ngIf="(gameState$ | async)?.hasCompletedIntro" class="flex h-screen bg-slate-950 text-slate-200 font-sans overflow-hidden selection:bg-blue-500 selection:text-white">
 
-      <!-- GAUCHE : BARRE LATÉRALE -->
       <div class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0 z-20 shadow-xl">
         <div class="p-4 border-b border-slate-800 flex flex-col gap-1 bg-slate-950/50">
           <h1 class="font-black text-xl tracking-tighter text-white flex items-center gap-2">
-            <span class="text-2xl">🚀</span> JEUB2 <span class="text-xs font-normal text-slate-500 border border-slate-700 rounded px-1">v1.0</span>
+            <span class="text-2xl">🚀</span> JEUB2 <span class="text-xs font-normal text-slate-500 border border-slate-700 rounded px-1">v1.1</span>
           </h1>
           <div class="flex justify-between items-end mt-2">
             <div class="flex flex-col">
@@ -29,7 +41,7 @@
             </div>
           </div>
         </div>
-
+        
         <div class="p-3 pb-0">
             <button (click)="toggleGlobalShop()" 
                     class="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black uppercase tracking-widest rounded-xl shadow-lg border border-white/10 flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-95">
@@ -52,396 +64,127 @@
 
         <div class="flex-1 overflow-y-auto p-3 space-y-2 custom-scroll">
           <div class="text-[10px] font-bold text-slate-600 uppercase tracking-widest px-2 mb-1 mt-2">Mes Entreprises</div>
+          
           <div *ngFor="let company of (gameState$ | async)?.companies" class="mb-2">
-            <button *ngIf="company.unlocked" (click)="selectCompany(company)" class="w-full text-left p-3 rounded-xl transition-all duration-200 border relative group overflow-hidden" [ngClass]="selectedCompany?.id === company.id ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/20' : 'bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-300 hover:border-slate-600'">
+            <button *ngIf="company.unlocked"
+                    (click)="selectCompany(company)"
+                    class="w-full text-left p-3 rounded-xl transition-all duration-200 border relative group overflow-hidden"
+                    [ngClass]="selectedCompany?.id === company.id ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/20' : 'bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-300 hover:border-slate-600'">
+              
               <div class="relative z-10 flex justify-between items-start">
                 <div>
                   <div class="font-bold text-sm flex items-center gap-2">
-                    <span class="text-lg">{{ company.type === 'FOODTRUCK' ? '🍔' : (company.type === 'FACTORY' ? '🏭' : (company.type === 'FREELANCE_DEV' ? '💻' : '💼')) }}</span>
+                    <span class="text-lg">{{ company.type === JobType.FOODTRUCK ? '🍔' : (company.type === JobType.FACTORY ? '🏭' : (company.type === JobType.FREELANCE_DEV ? '💻' : '🎰')) }}</span>
                     {{ company.name }}
                   </div>
                   <div class="text-xs opacity-70 mt-1">Niveau {{ company.level }}</div>
                 </div>
-                <div *ngIf="company.employees.length > 0" class="bg-black/20 px-2 py-1 rounded text-[10px] font-bold">👥 {{ company.employees.length }}</div>
               </div>
               <div *ngIf="selectedCompany?.id === company.id" class="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none"></div>
             </button>
-            <div *ngIf="!company.unlocked" class="w-full p-3 rounded-xl border border-slate-800 bg-slate-900/50 relative overflow-hidden flex flex-col gap-2 opacity-80 hover:opacity-100 transition-opacity">
+
+            <div *ngIf="!company.unlocked" 
+                 class="w-full p-3 rounded-xl border border-slate-800 bg-slate-900/50 relative overflow-hidden flex flex-col gap-2 opacity-80 hover:opacity-100 transition-opacity">
                  <div class="flex justify-between items-center opacity-60">
                     <div class="font-bold text-sm flex items-center gap-2 text-slate-400">
-                       <span class="text-lg grayscale">{{ company.type === 'FREELANCE_DEV' ? '💻' : (company.type === 'FACTORY' ? '🏭' : '💼') }}</span>
+                       <span class="text-lg grayscale">{{ company.type === JobType.FREELANCE_DEV ? '💻' : (company.type === JobType.FACTORY ? '🏭' : '🎰') }}</span>
                        {{ company.name }}
                     </div>
                     <span>🔒</span>
                  </div>
-                 <button (click)="buyCompany(company)" [disabled]="((gameState$ | async)?.money || 0) < getUnlockCost(company.type)" class="w-full py-2 bg-green-600 hover:bg-green-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold rounded-lg transition-all text-xs flex justify-center items-center gap-2 shadow-lg">
+                 <button (click)="buyCompany(company)"
+                         [disabled]="((gameState$ | async)?.money || 0) < getUnlockCost(company.type)"
+                         class="w-full py-2 bg-green-600 hover:bg-green-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold rounded-lg transition-all text-xs flex justify-center items-center gap-2 shadow-lg">
                      <span>ACHETER</span>
                      <span class="bg-black/20 px-1.5 rounded text-green-100">{{ getUnlockCost(company.type) | number:'1.0-0' }} €</span>
                  </button>
             </div>
           </div>
         </div>
-
+        
         <div class="p-4 border-t border-slate-800 bg-slate-950/30 flex flex-col gap-2">
           <div class="text-[10px] text-slate-500 text-center flex items-center justify-center gap-2">
              <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-             {{ (firebaseService.user$ | async)?.email || (firebaseService.user$ | async)?.uid?.substring(0, 8) }}
+             {{ (firebaseService.user$ | async)?.email || ((gameState$ | async)?.user?.username || 'Anonyme') }}
           </div>
-          <button (click)="toggleOnlineTab()" class="w-full py-2 px-3 rounded-lg border border-blue-500 text-blue-400 hover:bg-blue-900/30 text-xs font-bold uppercase transition-colors flex items-center justify-center gap-2"><span>🌍</span> Online / Classement</button>
+          <button (click)="toggleOnlineTab()" class="w-full py-2 px-3 rounded-lg border border-blue-500 text-blue-400 hover:bg-blue-900/30 text-xs font-bold uppercase transition-colors flex items-center justify-center gap-2">
+            <span>🌍</span> Online / Classement
+          </button>
           <div class="flex gap-2">
-            <button (click)="logout()" class="flex-1 py-2 px-3 rounded-lg border border-red-900/50 text-red-500 hover:bg-red-950/30 text-xs font-bold uppercase transition-colors flex items-center justify-center gap-2"><span>🚪</span> Déco.</button>
-            <button (click)="toggleAdmin()" class="flex-1 py-2 px-3 rounded-lg border border-slate-700 text-slate-400 hover:bg-slate-800 text-xs font-bold uppercase transition-colors flex items-center justify-center gap-2"><span>🕵️‍♂️</span> Cheat</button>
+            <button (click)="logout()" class="flex-1 py-2 px-3 rounded-lg border border-red-900/50 text-red-500 hover:bg-red-950/30 text-xs font-bold uppercase transition-colors flex items-center justify-center gap-2">
+                <span>🚪</span>
+            </button>
+            <button (click)="toggleAdmin()" class="flex-1 py-2 px-3 rounded-lg border border-slate-700 text-slate-400 hover:bg-slate-800 text-xs font-bold uppercase transition-colors flex items-center justify-center gap-2">
+                <span>🕵️‍♂️</span>
+            </button>
           </div>
         </div>
       </div>
 
-      <!-- CENTRE : JEU -->
-      <div class="flex-1 flex flex-col min-w-0 bg-slate-950 relative">
-        <div *ngIf="!selectedCompany" class="flex-1 flex flex-col items-center justify-center text-slate-500">
-          <div class="text-6xl mb-4 opacity-20">🏢</div>
-          <p>Sélectionnez une entreprise à gauche ou ouvrez la boutique</p>
-        </div>
-        <div *ngIf="selectedCompany" class="flex-1 flex flex-col h-full relative">
-          <div class="flex-1 p-6 overflow-hidden flex">
-            <div class="flex-1 h-full min-w-0 shadow-2xl rounded-2xl overflow-hidden border border-slate-700 relative bg-slate-900">
-              <ng-container [ngSwitch]="selectedCompany.type">
-                <app-foodtruck-game *ngSwitchCase="'FOODTRUCK'" class="h-full w-full block"></app-foodtruck-game>
-                <app-factory-game *ngSwitchCase="'FACTORY'" class="h-full w-full block"></app-factory-game>
-                <app-clothing-store-game *ngSwitchCase="'CLOTHING_STORE'" class="h-full w-full block"></app-clothing-store-game>
-                <app-freelance-dev-game *ngSwitchCase="'FREELANCE_DEV'" class="h-full w-full block"></app-freelance-dev-game>
-                <div *ngSwitchDefault class="p-10 text-center text-slate-500">Jeu en construction... 🚧</div>
-              </ng-container>
-            </div>
+      <div class="flex-1 relative bg-slate-950 overflow-hidden flex flex-col">
+          
+          <div *ngIf="!selectedCompany" class="h-full flex flex-col items-center justify-center text-slate-600">
+             <div class="text-6xl mb-6 animate-bounce">👈</div>
+             <h2 class="text-2xl font-bold text-slate-500">Sélectionnez une activité</h2>
+             <p class="text-slate-600 text-sm mt-2">Gérez votre empire depuis le menu de gauche.</p>
           </div>
-        </div>
+
+          <app-freelance-dev-game 
+              *ngIf="selectedCompany?.type === JobType.FREELANCE_DEV" 
+              class="w-full h-full block">
+          </app-freelance-dev-game>
+
+          <app-foodtruck-game 
+              *ngIf="selectedCompany?.type === JobType.FOODTRUCK" 
+              class="w-full h-full block">
+          </app-foodtruck-game>
+
+          <app-factory-game 
+              *ngIf="selectedCompany?.type === JobType.FACTORY" 
+              class="w-full h-full block">
+          </app-factory-game>
+
+          <app-blackjack-game 
+              *ngIf="selectedCompany?.type === JobType.CLOTHING_STORE" 
+              class="w-full h-full block">
+          </app-blackjack-game>
+
       </div>
 
-      <!-- MODALE BOUTIQUE GLOBALE (REMPLIE) -->
       <div *ngIf="isGlobalShopOpen" class="absolute inset-0 bg-slate-950/90 z-[100] flex items-center justify-center backdrop-blur-sm animate-fade-in" (click)="toggleGlobalShop()">
          <div class="bg-slate-900 border border-slate-700 w-full max-w-5xl h-[90%] rounded-2xl shadow-2xl flex flex-col overflow-hidden" (click)="$event.stopPropagation()">
             <div class="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-950">
                <h2 class="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-indigo-400">BOUTIQUE GLOBALE</h2>
                <div class="font-mono text-green-400 font-bold text-xl">{{ (gameState$ | async)?.money | number:'1.0-0' }} €</div>
             </div>
-            
-            <div class="flex-1 overflow-y-auto custom-scroll p-8 space-y-12">
-                <!-- Freelance Upgrades -->
-                <section>
-                    <h3 class="text-lg font-bold text-blue-400 mb-4 border-b border-blue-900/30 pb-2 uppercase tracking-widest flex items-center gap-2"><span>💻</span> Freelance Dev</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" *ngIf="(gameState$ | async) as state">
-                        <div *ngFor="let item of ['CHAIR', 'SCREEN', 'COFFEE', 'PC']" 
-                             class="bg-slate-800 p-4 rounded-xl border border-slate-700 flex flex-col gap-2 relative overflow-hidden group hover:border-blue-500 transition-all">
-                             <div class="absolute top-2 right-2 text-xs font-bold px-2 py-0.5 rounded bg-slate-950 text-slate-400" *ngIf="getSetupLevel(state, item) > 0">POSSÉDÉ</div>
-                             <div class="text-3xl mb-2">{{ item === 'CHAIR' ? '🪑' : (item === 'SCREEN' ? '🖥️' : (item === 'COFFEE' ? '☕' : '🚀')) }}</div>
-                             <div class="font-bold text-white">{{ item }}</div>
-                             <div class="text-xs text-slate-400 flex-1">Amélioration setup niveau 1.</div>
-                             <button (click)="buySetup(item)" 
-                                     [disabled]="getSetupLevel(state, item) > 0 || state.money < getSetupCost(item)"
-                                     class="mt-2 w-full py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-lg text-xs">
-                                 {{ getSetupLevel(state, item) > 0 ? 'ACHETÉ' : (getSetupCost(item) | number:'1.0-0') + ' €' }}
-                             </button>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Thèmes IDE -->
-                <section>
-                   <h3 class="text-lg font-bold text-purple-400 mb-4 border-b border-purple-900/30 pb-2 uppercase tracking-widest flex items-center gap-2"><span>🎨</span> Thèmes IDE</h3>
-                   <div class="grid grid-cols-1 md:grid-cols-3 gap-4" *ngIf="(gameState$ | async) as state">
-                      <div *ngFor="let theme of availableThemes" 
-                           class="bg-slate-800 p-4 rounded-xl border border-slate-700 flex flex-col gap-2 relative overflow-hidden group hover:border-purple-500 transition-all">
-                           
-                           <!-- Preview du thème -->
-                           <div class="h-20 w-full rounded mb-2 flex items-center justify-center font-mono text-xs border"
-                                [ngClass]="[theme.bgClass, theme.textClass, theme.borderClass]">
-                               <span [ngClass]="theme.accentClass">const</span> dev = <span [ngClass]="theme.successClass">true</span>;
-                           </div>
-
-                           <div class="flex justify-between items-center">
-                               <div class="font-bold text-white">{{ theme.name }}</div>
-                               <div *ngIf="isActiveTheme(state, theme.id)" class="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded border border-green-500/30">ACTIF</div>
-                           </div>
-                           
-                           <button (click)="buyOrEquipTheme(theme)" 
-                                   class="mt-2 w-full py-2 font-bold rounded-lg text-xs transition-all"
-                                   [ngClass]="isThemeOwned(state, theme.id) ? 'bg-slate-700 hover:bg-slate-600 text-white' : 'bg-purple-600 hover:bg-purple-500 text-white'">
-                               {{ isThemeOwned(state, theme.id) ? (isActiveTheme(state, theme.id) ? 'UTILISÉ' : 'ÉQUIPER') : (theme.cost | number:'1.0-0') + ' €' }}
-                           </button>
-                      </div>
-                   </div>
-                </section>
-
-                <!-- Foodtruck Upgrades -->
-                <section>
-                    <h3 class="text-lg font-bold text-orange-400 mb-4 border-b border-orange-900/30 pb-2 uppercase tracking-widest flex items-center gap-2"><span>🍔</span> Foodtruck</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" *ngIf="(gameState$ | async) as state">
-                         <div *ngFor="let up of ['grill', 'marketing', 'service']" 
-                              class="bg-slate-800 p-4 rounded-xl border border-slate-700 flex flex-col gap-2 hover:border-orange-500 transition-all">
-                              <div class="text-3xl mb-2">{{ up === 'grill' ? '🍳' : (up === 'marketing' ? '📢' : '⚡') }}</div>
-                              <div class="font-bold text-white capitalize">{{ up }} (Niv. {{ getFoodtruckLevel(state, up) }})</div>
-                              <button (click)="buyFoodtruck(up)" 
-                                      [disabled]="state.money < getFoodtruckCost(state, up)"
-                                      class="mt-auto w-full py-2 bg-orange-600 hover:bg-orange-500 disabled:bg-slate-700 disabled:opacity-50 text-white font-bold rounded-lg text-xs">
-                                  UP: {{ getFoodtruckCost(state, up) | number:'1.0-0' }} €
-                              </button>
-                         </div>
-                         <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 flex flex-col gap-2 hover:border-pink-500 transition-all">
-                              <div class="text-3xl mb-2">⌨️</div>
-                              <div class="font-bold text-white">Clavier Magique</div>
-                              <div class="text-xs text-slate-400 flex-1">Joue avec 1-9 et Espace.</div>
-                              <button (click)="buyKeyboard()" 
-                                      [disabled]="state.foodtruckUpgrades.hasKeyboard || state.money < 5000"
-                                      class="mt-2 w-full py-2 bg-pink-600 hover:bg-pink-500 disabled:bg-slate-700 disabled:opacity-50 text-white font-bold rounded-lg text-xs">
-                                  {{ state.foodtruckUpgrades.hasKeyboard ? 'ACHETÉ' : '5 000 €' }}
-                              </button>
-                         </div>
-                    </div>
-                </section>
-
-                <!-- Prestige -->
-                <section>
-                    <h3 class="text-lg font-bold text-amber-400 mb-4 border-b border-amber-900/30 pb-2 uppercase tracking-widest flex items-center gap-2"><span>👑</span> Prestige & Luxe</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4" *ngIf="(gameState$ | async) as state">
-                        <div *ngFor="let item of prestigeItems" 
-                             class="bg-slate-800 p-4 rounded-xl border border-slate-700 flex items-center gap-4 relative overflow-hidden group hover:border-amber-500 transition-all">
-                             <div class="text-4xl group-hover:scale-110 transition-transform">{{ item.icon }}</div>
-                             <div class="flex-1">
-                                 <div class="font-bold text-white">{{ item.name }}</div>
-                                 <div class="text-xs text-slate-400">{{ item.desc }}</div>
-                             </div>
-                             <button (click)="buyPrestige(item)"
-                                     [disabled]="hasPrestigeItem(state, item.id) || state.money < item.cost"
-                                     class="px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-bold rounded-lg text-xs min-w-[80px]">
-                                 {{ hasPrestigeItem(state, item.id) ? 'ACQUIS' : (item.cost | number:'1.0-0') + '€' }}
-                             </button>
-                        </div>
-                    </div>
-                </section>
-            </div>
-
             <div class="p-4 border-t border-slate-800 bg-slate-950 flex justify-end">
                 <button (click)="toggleGlobalShop()" class="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg">Fermer</button>
             </div>
          </div>
       </div>
 
-      <!-- MODALE ADMIN (REMPLIE) -->
       <div *ngIf="isAdminOpen" class="absolute inset-0 bg-red-950/90 z-[200] flex items-center justify-center backdrop-blur-sm animate-fade-in" (click)="toggleAdmin()">
-          <div class="bg-slate-900 border border-red-500 p-8 rounded-xl w-96 shadow-2xl" (click)="$event.stopPropagation()">
-              <h2 class="text-2xl font-black text-red-500 mb-6 flex items-center gap-2">
-                  <span>🕵️‍♂️</span> ZONE DE TRICHE
-              </h2>
+         <div class="bg-slate-900 border border-red-500 p-8 rounded-xl w-96 shadow-2xl" (click)="$event.stopPropagation()">
+              <h2 class="text-2xl font-black text-red-500 mb-6 flex items-center gap-2"><span>🕵️‍♂️</span> ZONE DE TRICHE</h2>
               <div class="space-y-4">
-                  <div class="text-xs uppercase font-bold text-slate-500 mb-2">Ajouter de l'argent</div>
                   <div class="grid grid-cols-2 gap-2">
                       <button (click)="adminAddMoney(1000)" class="w-full py-3 bg-red-900/20 border border-red-500/50 hover:bg-red-800 hover:text-white text-red-300 font-bold rounded transition-all">+1k €</button>
                       <button (click)="adminAddMoney(100000)" class="w-full py-3 bg-red-900/20 border border-red-500/50 hover:bg-red-800 hover:text-white text-red-300 font-bold rounded transition-all">+100k €</button>
                   </div>
-                  
                   <div class="pt-4 border-t border-slate-800">
-                      <label class="text-xs uppercase font-bold text-slate-500 block mb-2">Voyage dans le temps (Heure)</label>
-                      <input type="range" min="0" max="24" step="0.5" [value]="(gameState$ | async)?.timeOfDay" (input)="adminSetTime($event)" class="w-full accent-red-500 h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer">
-                      <div class="text-right text-red-400 font-mono font-bold mt-1">{{ formatTime((gameState$ | async)?.timeOfDay || 0) }}</div>
-                  </div>
-
-                  <div class="pt-4 border-t border-slate-800">
-                      <button (click)="resetData()" class="w-full py-4 bg-black border-2 border-red-600 text-red-500 hover:bg-red-600 hover:text-white font-black rounded-lg mt-2 transition-all uppercase tracking-widest shadow-[0_0_20px_rgba(220,38,38,0.2)]">
-                          ⚠️ EFFACER MA SAUVEGARDE
-                      </button>
+                      <button (click)="resetData()" class="w-full py-4 bg-black border-2 border-red-600 text-red-500 hover:bg-red-600 hover:text-white font-black rounded-lg mt-2 transition-all uppercase tracking-widest">⚠️ EFFACER MA SAUVEGARDE</button>
                   </div>
               </div>
           </div>
       </div>
 
-      <!-- === MODALE ONLINE (AMÉLIORÉE) === -->
       <div *ngIf="isOnlineTabOpen" class="absolute inset-0 bg-slate-950/95 z-[150] flex items-center justify-center backdrop-blur-sm animate-fade-in" (click)="toggleOnlineTab()">
-        <div class="bg-slate-900 border border-blue-500/30 w-full max-w-6xl h-[90%] rounded-2xl shadow-2xl flex flex-col overflow-hidden relative" (click)="$event.stopPropagation()">
-            
-            <!-- Décoration -->
-            <div class="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none"></div>
-            <div class="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl translate-y-1/3 -translate-x-1/4 pointer-events-none"></div>
+          </div>
 
-            <!-- Ticker -->
-            <div class="bg-blue-600/10 border-b border-blue-500/20 py-1 px-4 overflow-hidden whitespace-nowrap">
-                <div class="text-[10px] font-mono text-blue-300 animate-marquee inline-block">
-                    📢 {{ tickerMessages[tickerIndex] }}
-                </div>
-            </div>
-
-            <!-- Header -->
-            <div class="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-950/80 backdrop-blur-md z-10">
-               <div class="flex items-center gap-4">
-                   <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-2xl shadow-lg shadow-blue-500/20">🌍</div>
-                   <div>
-                       <h2 class="text-2xl font-black text-white tracking-tight">LE MONDE CONNECTÉ</h2>
-                       <div class="flex gap-4 mt-1">
-                           <button class="text-xs font-bold uppercase tracking-wider px-2 py-1 rounded hover:bg-white/10 transition-colors" 
-                                   [class.text-blue-400]="activeTab==='LEADERBOARD'" [class.text-slate-500]="activeTab!=='LEADERBOARD'"
-                                   (click)="activeTab='LEADERBOARD'">Classement</button>
-                           <button class="text-xs font-bold uppercase tracking-wider px-2 py-1 rounded hover:bg-white/10 transition-colors" 
-                                   [class.text-blue-400]="activeTab==='MARKET'" [class.text-slate-500]="activeTab!=='MARKET'"
-                                   (click)="activeTab='MARKET'">Marché Noir</button>
-                           <button class="text-xs font-bold uppercase tracking-wider px-2 py-1 rounded hover:bg-white/10 transition-colors" 
-                                   [class.text-blue-400]="activeTab==='GUILD'" [class.text-slate-500]="activeTab!=='GUILD'"
-                                   (click)="activeTab='GUILD'">Guildes</button>
-                       </div>
-                   </div>
-               </div>
-
-               <div class="flex items-center gap-4">
-                   <div class="flex items-center gap-2 bg-slate-800/50 px-4 py-2 rounded-xl border border-slate-700/50 hover:border-slate-600 transition-colors">
-                       <span class="text-xs text-slate-500 uppercase font-bold tracking-wider">Identité</span>
-                       <input type="text" [(ngModel)]="newUsername" placeholder="Votre pseudo..." class="bg-transparent border-none focus:ring-0 text-white font-bold w-32 text-sm placeholder:text-slate-600 p-0">
-                       <button (click)="updateUsername()" class="text-xs bg-blue-600 px-3 py-1 rounded-lg text-white font-bold hover:bg-blue-500 transition-colors shadow-lg shadow-blue-500/20">OK</button>
-                   </div>
-                   <button (click)="connect()" class="w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 text-white flex items-center justify-center transition-all active:scale-95 border border-slate-700" title="Actualiser">🔄</button>
-                   <button (click)="toggleOnlineTab()" class="w-10 h-10 rounded-xl bg-slate-800 hover:bg-red-500/20 hover:text-red-500 text-slate-400 flex items-center justify-center transition-all border border-slate-700">✕</button>
-               </div>
-            </div>
-
-            <!-- ONGLET CLASSEMENT -->
-            <div class="flex-1 flex overflow-hidden z-10" *ngIf="activeTab === 'LEADERBOARD'">
-                <div class="w-full flex flex-col bg-slate-950/30">
-                    <div class="p-6 pb-2 flex items-end justify-center gap-4 border-b border-slate-800/50 min-h-[180px]">
-                        <div class="flex flex-col items-center gap-2 w-1/4" *ngIf="leaderboard.length > 1">
-                            <div class="text-center"><div class="text-sm font-bold text-slate-300 truncate max-w-[100px]">{{ leaderboard[1].username }}</div><div class="text-[10px] text-slate-500">{{ leaderboard[1].money | number:'1.0-0' }} €</div></div>
-                            <div class="w-full h-24 bg-gradient-to-t from-slate-700 to-slate-600 rounded-t-lg flex items-end justify-center pb-2 relative group"><div class="text-2xl font-black text-slate-400">2</div><div class="absolute -top-3 w-8 h-8 rounded-full bg-slate-300 border-2 border-slate-500 flex items-center justify-center text-xs font-bold shadow-lg">🥈</div></div>
-                        </div>
-                        <div class="flex flex-col items-center gap-2 w-1/4 -mt-8" *ngIf="leaderboard.length > 0">
-                            <div class="text-center"><div class="text-sm font-bold text-yellow-400 truncate max-w-[120px]">{{ leaderboard[0].username }}</div><div class="text-[10px] text-yellow-600/80 font-mono">{{ leaderboard[0].money | number:'1.0-0' }} €</div></div>
-                            <div class="w-full h-32 bg-gradient-to-t from-yellow-600 to-yellow-400 rounded-t-lg flex items-end justify-center pb-4 relative shadow-[0_0_30px_rgba(234,179,8,0.3)]"><div class="text-4xl font-black text-yellow-900">1</div><div class="absolute -top-4 w-10 h-10 rounded-full bg-yellow-300 border-2 border-yellow-500 flex items-center justify-center text-lg shadow-lg animate-bounce">👑</div></div>
-                        </div>
-                        <div class="flex flex-col items-center gap-2 w-1/4" *ngIf="leaderboard.length > 2">
-                            <div class="text-center"><div class="text-sm font-bold text-amber-700 truncate max-w-[100px]">{{ leaderboard[2].username }}</div><div class="text-[10px] text-slate-500">{{ leaderboard[2].money | number:'1.0-0' }} €</div></div>
-                            <div class="w-full h-16 bg-gradient-to-t from-amber-800 to-amber-700 rounded-t-lg flex items-end justify-center pb-2 relative"><div class="text-xl font-black text-amber-900">3</div><div class="absolute -top-3 w-8 h-8 rounded-full bg-amber-600 border-2 border-amber-800 flex items-center justify-center text-xs font-bold shadow-lg">🥉</div></div>
-                        </div>
-                    </div>
-                    
-                    <div class="flex-1 overflow-y-auto custom-scroll p-4 space-y-2">
-                        <div *ngFor="let player of leaderboard; let i = index" 
-                             (click)="viewPlayerDetails(player)"
-                             class="p-3 rounded-xl border flex items-center gap-4 transition-all hover:translate-x-1 cursor-pointer hover:bg-white/5"
-                             [ngClass]="getRankClass(i)">
-                            <div class="font-black text-lg w-8 text-center opacity-50">#{{ i + 1 }}</div>
-                            <div class="flex-1 min-w-0">
-                                <div class="flex items-center gap-2">
-                                    <span class="font-bold text-sm truncate">{{ player.username }}</span>
-                                    <span *ngIf="player.prestige > 0" class="text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded border border-purple-500/30 flex items-center gap-1"><span>💀</span> {{ player.prestige }}</span>
-                                </div>
-                                <div class="text-xs opacity-60 font-mono">{{ player.money | number:'1.0-0' }} €</div>
-                            </div>
-                            <div *ngIf="i < 3" class="text-xl">{{ i === 0 ? '🏆' : (i === 1 ? '🥈' : '🥉') }}</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ONGLET MARCHÉ NOIR -->
-            <div class="flex-1 flex flex-col p-8 bg-slate-900 overflow-y-auto custom-scroll" *ngIf="activeTab === 'MARKET'">
-                <div class="flex justify-between items-end mb-8">
-                    <div>
-                        <h3 class="text-2xl font-black text-white flex items-center gap-3"><span class="text-3xl">📦</span> MARCHÉ NOIR</h3>
-                        <p class="text-slate-500 text-sm mt-1">Recrutez des talents ou vendez les vôtres.</p>
-                    </div>
-                    <button (click)="sellEmployee()" class="px-5 py-3 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold rounded-xl shadow-lg shadow-red-900/20 active:scale-95 transition-all">➕ Vendre Dev Senior</button>
-                </div>
-                <div class="grid grid-cols-2 lg:grid-cols-3 gap-6">
-                    <div *ngFor="let item of marketItems" class="bg-slate-800 p-5 rounded-2xl border border-slate-700 relative group hover:border-blue-500 transition-all hover:shadow-2xl hover:shadow-blue-500/10 hover:-translate-y-1">
-                        <div class="flex justify-between items-start mb-4">
-                            <div class="w-12 h-12 rounded-full bg-slate-700 flex items-center justify-center text-2xl border border-slate-600 group-hover:border-blue-400 transition-colors">👨‍💻</div>
-                            <div class="text-[10px] font-bold bg-slate-950 px-2 py-1 rounded text-slate-400 border border-slate-700 uppercase tracking-wide">Vendeur: {{ item.sellerName }}</div>
-                        </div>
-                        <div class="font-black text-white text-lg mb-1">{{ item.type }}</div>
-                        <div class="text-xs text-slate-400 mb-4">
-                            <span *ngIf="item.rarity === 'RARE'" class="text-blue-400 font-bold">RARE</span>
-                            <span *ngIf="!item.rarity" class="text-slate-500">Commun</span>
-                        </div>
-                        <div class="flex items-center justify-between mt-auto pt-4 border-t border-slate-700">
-                            <div class="text-green-400 font-mono font-black text-lg">{{ item.price | number:'1.0-0' }} €</div>
-                            <button (click)="buyItem(item)" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xs shadow-lg shadow-blue-900/20 active:scale-95 transition-all">ACHETER</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ONGLET GUILDES -->
-            <div class="flex-1 flex flex-col p-8 bg-slate-900 overflow-y-auto custom-scroll" *ngIf="activeTab === 'GUILD'">
-                <div class="flex justify-between items-center mb-8">
-                    <h3 class="text-2xl font-black text-white flex items-center gap-3"><span class="text-3xl">🤝</span> HOLDINGS</h3>
-                    <div class="flex gap-2">
-                        <input type="text" [(ngModel)]="newHoldingName" placeholder="Nom de la guilde..." class="bg-slate-800 border border-slate-700 px-3 py-2 rounded-lg text-white text-sm">
-                        <button (click)="createHolding()" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg text-xs">CRÉER</button>
-                    </div>
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div *ngFor="let guild of holdings" class="bg-slate-800 p-4 rounded-xl border border-slate-700 flex items-center gap-4">
-                        <div class="text-4xl">{{ guild.icon || '🏢' }}</div>
-                        <div>
-                            <div class="font-bold text-white">{{ guild.name }}</div>
-                            <div class="text-xs text-slate-400">Chef: {{ guild.leaderName }}</div>
-                            <div class="text-xs text-purple-400 mt-1 font-mono">Valuation: {{ guild.totalValuation | number:'1.0-0' }} €</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- MODALE DETAIL JOUEUR -->
-            <div *ngIf="selectedPlayer" class="absolute inset-0 bg-black/80 z-20 flex items-center justify-center p-12 backdrop-blur-sm animate-fade-in" (click)="closePlayerDetails()">
-                <div class="bg-slate-900 border border-slate-700 p-8 rounded-2xl w-full max-w-lg relative shadow-2xl" (click)="$event.stopPropagation()">
-                    <button (click)="closePlayerDetails()" class="absolute top-4 right-4 text-slate-500 hover:text-white">✕</button>
-                    <div class="text-center mb-8">
-                        <div class="w-24 h-24 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full mx-auto mb-4 flex items-center justify-center text-4xl shadow-xl">
-                            {{ selectedPlayer.avatarId || '👤' }}
-                        </div>
-                        <h2 class="text-3xl font-black text-white">{{ selectedPlayer.username }}</h2>
-                        <div class="text-blue-400 font-mono text-xl">{{ selectedPlayer.money | number:'1.0-0' }} €</div>
-                        <div class="text-slate-500 text-xs mt-1">Membre depuis: {{ (selectedPlayer.creationDate | date:'shortDate') || 'Inconnu' }}</div>
-                    </div>
-                    
-                    <div class="grid grid-cols-2 gap-4 text-center">
-                        <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
-                            <div class="text-xs text-slate-500 uppercase font-bold">Temps de Jeu</div>
-                            <div class="text-xl font-bold text-white">{{ (selectedPlayer.stats?.totalPlayTimeMinutes || 0) | number:'1.0-0' }} min</div>
-                        </div>
-                        <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
-                            <div class="text-xs text-slate-500 uppercase font-bold">Boss Battus</div>
-                            <div class="text-xl font-bold text-white">{{ selectedPlayer.prestige || 0 }}</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-        </div>
-      </div>
-
-      <!-- MODALE RAPPORT (Déjà intégrée) -->
       <div *ngIf="dailyReport" class="absolute inset-0 bg-slate-900/95 z-[100] flex items-center justify-center backdrop-blur-md animate-fade-in">
           <div class="bg-slate-800 p-8 rounded-2xl border border-slate-600 shadow-2xl max-w-md w-full text-center">
               <h2 class="text-3xl font-black text-white mb-2">FIN DE LA JOURNÉE {{ dailyReport.day }}</h2>
-              <div class="h-1 w-20 bg-blue-500 mx-auto mb-6 rounded-full"></div>
-              <div class="space-y-4 mb-8">
-                  <div class="flex justify-between items-center p-3 bg-slate-900/50 rounded-lg border border-slate-700">
-                      <span class="text-slate-400">Revenus</span>
-                      <span class="text-green-400 font-bold font-mono text-xl">+{{ dailyReport.revenue | number:'1.0-0' }} €</span>
-                  </div>
-                  <div class="flex justify-between items-center p-3 bg-slate-900/50 rounded-lg border border-slate-700">
-                      <span class="text-slate-400">Salaires & Frais</span>
-                      <span class="text-red-400 font-bold font-mono text-xl">-{{ dailyReport.expenses | number:'1.0-0' }} €</span>
-                  </div>
-                  <div class="flex justify-between items-center p-3 bg-slate-900/50 rounded-lg border border-slate-700">
-                      <span class="text-slate-400">Clients Servis</span>
-                      <span class="text-blue-400 font-bold font-mono text-xl">{{ dailyReport.customersServed }}</span>
-                  </div>
-                  <div class="pt-4 border-t border-slate-700 flex justify-between items-center">
-                      <span class="font-bold text-white uppercase tracking-widest">Profit Net</span>
-                      <span class="font-black text-2xl font-mono" [ngClass]="(dailyReport.revenue - dailyReport.expenses) >= 0 ? 'text-green-400' : 'text-red-500'">
-                          {{ (dailyReport.revenue - dailyReport.expenses) | number:'1.0-0' }} €
-                      </span>
-                  </div>
-              </div>
-              <button (click)="closeReport()" class="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl text-lg shadow-lg hover:shadow-blue-500/20 transition-all">
-                  JOUR SUIVANT ➡️
-              </button>
+              <button (click)="closeReport()" class="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl text-lg shadow-lg hover:shadow-blue-500/20 transition-all mt-8">JOUR SUIVANT ➡️</button>
           </div>
       </div>
 
